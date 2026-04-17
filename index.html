@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosmic Bullet Hell - Space Invaders Style</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+            color: #0ff;
+        }
+
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 14px;
+            text-shadow: 0 0 10px #0ff;
+            line-height: 1.5;
+        }
+
+        .hud-right {
+            left: auto;
+            right: 10px;
+            text-align: right;
+        }
+
+        #waveDisplay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            text-shadow: 0 0 20px #f0f;
+            opacity: 0;
+            transition: opacity 0.5s;
+            pointer-events: none;
+        }
+
+        #gameOver {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            display: none;
+            background: rgba(0,0,0,0.55);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 40px;
+            border: 2px solid #0ff;
+            box-shadow: 0 0 30px #0ff;
+            z-index: 210;
+            pointer-events: auto;
+        }
+
+        #gameOver h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #f00;
+            text-shadow: 0 0 20px #f00;
+        }
+
+        #startScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+        }
+
+        #startScreen h1 {
+            font-size: 64px;
+            margin-bottom: 20px;
+            background: linear-gradient(45deg, #0ff, #f0f, #0ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: glow 2s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.5); }
+        }
+
+        .btn {
+            background: transparent;
+            border: 2px solid #0ff;
+            color: #0ff;
+            padding: 15px 40px;
+            font-size: 20px;
+            font-family: 'Courier New', monospace;
+            cursor: pointer;
+            margin: 10px;
+            transition: all 0.3s;
+            pointer-events: auto;
+        }
+
+        .btn:hover {
+            background: #0ff;
+            color: #000;
+            box-shadow: 0 0 20px #0ff;
+        }
+
+        .powerup-indicator {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .powerup-icon {
+            width: 30px;
+            height: 30px;
+            border: 1px solid #0ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            background: rgba(0,255,255,0.2);
+        }
+
+        #bossHealth {
+            position: absolute;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 400px;
+            height: 20px;
+            border: 2px solid #f00;
+            display: none;
+        }
+
+        #bossHealthBar {
+            height: 100%;
+            background: linear-gradient(90deg, #f00, #ff0);
+            width: 100%;
+            transition: width 0.3s;
+        }
+
+        #bossName {
+            position: absolute;
+            bottom: 85px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 18px;
+            color: #f00;
+            text-shadow: 0 0 10px #f00;
+            display: none;
+        }
+
+        .controls-info {
+            margin-top: 30px;
+            text-align: center;
+            color: #888;
+            font-size: 14px;
+        }
+
+        .controls-info p {
+            margin: 5px 0;
+        }
+    
+        /* ── Post-processing overlays ── */
+        #vignette {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 88; /* just below arCanvas */
+            background: radial-gradient(ellipse at 50% 50%,
+                transparent 52%,
+                rgba(0,0,0,0.35) 75%,
+                rgba(0,0,0,0.72) 100%);
+        }
+        #scanlines {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 89;
+            background: repeating-linear-gradient(
+                to bottom,
+                transparent 0px,
+                transparent 3px,
+                rgba(0,0,0,0.08) 3px,
+                rgba(0,0,0,0.08) 4px
+            );
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+
+        @keyframes bossWarn {
+            0%, 100% { color: #f00; text-shadow: 0 0 30px #f00; transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            50%       { color: #ff8800; text-shadow: 0 0 60px #ff8800, 0 0 120px #ff0000; transform: translate(-50%, -50%) scale(1.15); opacity: 0.2; }
+        }
+
+        #playerName {
+            background: transparent;
+            border: 2px solid #0ff;
+            color: #0ff;
+            padding: 12px 20px;
+            font-size: 18px;
+            font-family: 'Courier New', monospace;
+            text-align: center;
+            margin-bottom: 20px;
+            width: 300px;
+            outline: none;
+            text-transform: uppercase;
+            box-shadow: 0 0 10px rgba(0,255,255,0.3);
+            transition: all 0.3s;
+        }
+
+        #playerName:focus {
+            box-shadow: 0 0 20px #0ff;
+            background: rgba(0,255,255,0.1);
+        }
+
+        #playerName::placeholder {
+            color: #088;
+        }
+
+        .btn-small {
+            font-size: 14px;
+            padding: 10px 25px;
+            border-color: #888;
+            color: #888;
+        }
+
+        .btn-small:hover {
+            background: #888;
+            color: #000;
+            box-shadow: 0 0 15px #888;
+        }
+
+        .btn-danger {
+            border-color: #f00;
+            color: #f00;
+        }
+
+        .btn-danger:hover {
+            background: #f00;
+            color: #000;
+            box-shadow: 0 0 15px #f00;
+        }
+
+        #newHighScore {
+            font-size: 28px;
+            color: #ffd700;
+            text-shadow: 0 0 20px #ffd700;
+            margin-bottom: 10px;
+            animation: pulse 1.2s ease-in-out infinite;
+            font-weight: bold;
+        }
+
+        .leaderboard-box {
+            margin-bottom: 20px;
+            max-height: 280px;
+            overflow-y: auto;
+            border: 2px solid #0ff;
+            background: rgba(0,10,10,0.82);
+            box-shadow: 0 0 15px rgba(0,255,255,0.2);
+        }
+
+        .leaderboard-box table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        .leaderboard-box th {
+            padding: 10px;
+            border-bottom: 2px solid #0ff;
+            background: rgba(0,255,255,0.15);
+            color: #0ff;
+            font-family: 'Courier New', monospace;
+        }
+
+        .leaderboard-box td {
+            padding: 8px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .leaderboard-box::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .leaderboard-box::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.5);
+        }
+
+        .leaderboard-box::-webkit-scrollbar-thumb {
+            background: #0ff;
+            border-radius: 4px;
+        }
+
+        #leaderboardScreen {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.97);
+            z-index: 300;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .final-stats {
+            font-size: 16px;
+            color: #888;
+            margin-bottom: 20px;
+        }
+
+        .final-stats span {
+            color: #0ff;
+            font-weight: bold;
+        }
+
+    </style>
+<base target="_blank">
+<base target="_blank">
+<base target="_blank">
+</head>
+<body>
+    <div id="gameContainer">
+        <!-- Post-processing overlays -->
+        <div id="vignette"></div>
+        <div id="scanlines"></div>
+        <div id="ui">
+            <div class="hud">
+                <div>SCORE: <span id="score">0</span></div>
+                <div>WAVE: <span id="wave">1</span>/20</div>
+                <div>ENEMIES: <span id="enemies">0</span></div>
+            </div>
+            <div class="hud hud-right">
+                <div>HP: <span id="health">5</span>/5</div>
+                <div>ATK SPD: <span id="atkSpeed">1.0</span>x</div>
+                <div>LASERS: <span id="lasers">1</span></div>
+            </div>
+            <div id="waveDisplay">WAVE 1</div>
+            <div id="bossName">MINI BOSS</div>
+            <div id="bossHealth"><div id="bossHealthBar"></div></div>
+            <div class="powerup-indicator" id="powerupIndicator"></div>
+            <div id="godModeIndicator" style="display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);color:#ffd700;font-size:13px;font-weight:bold;text-shadow:0 0 12px #ffd700;letter-spacing:2px;pointer-events:none;">⭐ GOD MODE ⭐</div>
+        </div>
+
+        <!-- Game Over modal — outside #ui so it's not capped by ui's z-index:100 stacking context -->
+        <div id="gameOver">
+            <h1 id="endTitle">GAME OVER</h1>
+            <div id="newHighScore" style="display:none;">NEW HIGH SCORE!</div>
+            <p style="font-size: 24px; margin-bottom: 5px;">Final Score: <span id="finalScore">0</span></p>
+            <p class="final-stats">Pilot: <span id="finalPlayerName">Unknown</span> &bull; Reached Wave: <span id="finalWave">1</span></p>
+
+            <div class="leaderboard-box" style="width: 500px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>RANK</th>
+                            <th>PILOT</th>
+                            <th>SCORE</th>
+                            <th>WAVE</th>
+                            <th>STATUS</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboardBody"></tbody>
+                </table>
+            </div>
+
+            <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+                <button class="btn" onclick="location.reload()">RESTART</button>
+                <button class="btn btn-small" onclick="returnToMenu()">MAIN MENU</button>
+                <button class="btn btn-small" onclick="exportScores()">EXPORT JSON</button>
+            </div>
+        </div>
+
+        <div id="bootError" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;background:#000;z-index:999;color:#f00;font-family:monospace;padding:40px;box-sizing:border-box;">
+        <h1 style="color:#f00;">SYSTEM FAILURE</h1>
+        <p id="bootErrorMsg">Three.js failed to load.</p>
+        <p style="color:#888;margin-top:20px;">Check your internet connection, or download three.js locally.</p>
+    </div>
+    <div id="startScreen">
+            <h1>Space Wars</h1>
+            <p style="margin-bottom: 20px; color: #888;">A Space Invaders Spiritual Successor</p>
+            <input type="text" id="playerName" placeholder="ENTER PILOT NAME" maxlength="12" value="PILOT">
+            <button class="btn" onclick="startGame()">START GAME</button>
+            <div style="display:flex;gap:10px;">
+                <button class="btn btn-small" onclick="showLeaderboardFromStart()">LEADERBOARD</button>
+                <button id="godModeBtn" class="btn btn-small" style="border-color:#888;color:#888;" onclick="toggleGodMode()">GOD MODE: OFF</button>
+                <button class="btn btn-small btn-danger" onclick="clearScores()">RESET DATA</button>
+            </div>
+            <div class="controls-info">
+                <p>WASD / ARROW KEYS - Move</p>
+                <p>SPACE / CLICK - Shoot | SHIFT - Dash</p>
+                <p>P - Pause | C - Nuke | <span style="color:#ffd700;">G - God Mode</span></p>
+                <p>Collect powerups from defeated enemies!</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        window.threeJsLoaded = typeof THREE !== 'undefined';
+        if (!window.threeJsLoaded) {
+            document.getElementById('bootError').style.display = 'block';
+            document.getElementById('bootErrorMsg').textContent = 'Three.js (three.min.js) failed to load from CDN.';
+        }
+    </script>
+    <script src="game.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <video id="arVideo" autoplay playsinline muted style="display:none;position:absolute;pointer-events:none;"></video>
+    <canvas id="arCanvas" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:150;pointer-events:none;filter:contrast(1.1) saturate(1.2) brightness(0.85);"></canvas>
+
+    <!-- AR close button: shown only while AR is running, sits above arCanvas -->
+    <button id="arCloseBtn" onclick="closeAR()"
+        style="display:none;position:fixed;top:18px;right:18px;z-index:160;
+               background:rgba(0,0,0,0.7);border:2px solid #0ff;color:#0ff;
+               font-family:'Courier New',monospace;font-size:14px;font-weight:bold;
+               padding:10px 20px;cursor:pointer;letter-spacing:2px;
+               text-shadow:0 0 8px #0ff;box-shadow:0 0 15px rgba(0,255,255,0.4);
+               transition:all 0.2s;">
+        ✕ CLOSE CAM
+    </button>
+        <div id="leaderboardScreen">
+            <h2 style="font-size: 42px; margin-bottom: 10px; background: linear-gradient(45deg, #0ff, #f0f, #0ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">LEADERBOARD</h2>
+            <div class="leaderboard-box" style="width: 650px; max-height: 450px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:60px;">RANK</th>
+                            <th style="width:120px;">PILOT</th>
+                            <th style="width:140px;">SCORE</th>
+                            <th style="width:70px;">WAVE</th>
+                            <th style="width:100px;">STATUS</th>
+                            <th style="width:90px;">DATE</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboardBodyStart"></tbody>
+                </table>
+            </div>
+            <div style="display:flex;gap:10px;">
+                <button class="btn" onclick="hideLeaderboard()">BACK</button>
+                <button class="btn btn-small" onclick="exportScores()">EXPORT JSON</button>
+                <button class="btn btn-small btn-danger" onclick="clearScores()">RESET DATA</button>
+            </div>
+        </div>
+</body>
+</html>
