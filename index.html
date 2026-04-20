@@ -352,6 +352,95 @@
             font-weight: bold;
         }
 
+
+        /* ── Difficulty Selector ── */
+        .diff-row {
+            display: flex;
+            gap: 8px;
+            margin: 12px 0 6px;
+            justify-content: center;
+        }
+
+        .diff-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px 16px;
+            min-width: 158px;
+            border: 2px solid #2a2a2a;
+            color: #444;
+            background: transparent;
+            font-family: 'Courier New', monospace;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .diff-btn .dn {
+            font-size: 13px;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+
+        .diff-btn .dd {
+            font-size: 10px;
+            margin-top: 5px;
+            color: #333;
+            line-height: 1.4;
+            text-align: center;
+        }
+
+        .diff-btn:hover {
+            border-color: #555;
+            color: #888;
+        }
+
+        .diff-btn:hover .dd { color: #666; }
+
+        .diff-btn.diff-active {
+            border-color: #0ff;
+            color: #0ff;
+            box-shadow: 0 0 14px rgba(0,255,255,0.3);
+            background: rgba(0,255,255,0.05);
+        }
+
+        .diff-btn.diff-active .dd { color: #0aa; }
+
+        #diff-btn-medium.diff-active {
+            border-color: #00ff88;
+            color: #00ff88;
+            box-shadow: 0 0 14px rgba(0,255,136,0.3);
+            background: rgba(0,255,136,0.05);
+        }
+
+        #diff-btn-medium.diff-active .dd { color: #00aa55; }
+
+        #diff-btn-hell {
+            border-color: #3a0000;
+            color: #550000;
+        }
+
+        #diff-btn-hell:hover {
+            border-color: #880000;
+            color: #aa0000;
+        }
+
+        #diff-btn-hell.diff-active {
+            border-color: #ff2200;
+            color: #ff2200;
+            box-shadow: 0 0 18px rgba(255,34,0,0.45);
+            background: rgba(255,34,0,0.05);
+        }
+
+        #diff-btn-hell.diff-active .dd { color: #aa1100; }
+
+        .diff-label {
+            font-size: 11px;
+            color: #444;
+            letter-spacing: 3px;
+            margin: 14px 0 6px;
+            text-align: center;
+        }
+
     </style>
 <base target="_blank">
 <base target="_blank">
@@ -418,6 +507,22 @@
             <h1>Space Wars</h1>
             <p style="margin-bottom: 20px; color: #888;">A Space Invaders Spiritual Successor</p>
             <input type="text" id="playerName" placeholder="ENTER PILOT NAME" maxlength="12" value="PILOT">
+            <div class="diff-label">SELECT DIFFICULTY</div>
+            <div class="diff-row">
+                <button class="diff-btn" id="diff-btn-medium" onclick="setDifficulty('medium')">
+                    <span class="dn">◈ CORSAIR</span>
+                    <span class="dd">High loot · Weaker foes<br>No reinforcements</span>
+                </button>
+                <button class="diff-btn diff-active" id="diff-btn-hard" onclick="setDifficulty('hard')">
+                    <span class="dn">⬡ VANGUARD</span>
+                    <span class="dd">Standard threat<br>Command-level combat</span>
+                </button>
+                <button class="diff-btn" id="diff-btn-hell" onclick="setDifficulty('hell')">
+                    <span class="dn">☠ VOID REAPER</span>
+                    <span class="dd">Dense waves · Lethal hits<br>Scarce loot</span>
+                </button>
+            </div>
+            
             <button class="btn" onclick="startGame()">START GAME</button>
             <div style="display:flex;gap:10px;">
                 <button class="btn btn-small" onclick="showLeaderboardFromStart()">LEADERBOARD</button>
@@ -444,7 +549,7 @@
     <script src="game.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
     <video id="arVideo" autoplay playsinline muted style="display:none;position:absolute;pointer-events:none;"></video>
-    <canvas id="arCanvas" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:150;pointer-events:none;filter:contrast(1.1) saturate(1.2) brightness(0.85);"></canvas>
+    <canvas id="arCanvas" style="display:none;position:fixed;top:0;left:0;width:50%;height:50%;z-index:350;pointer-events:none;filter:contrast(1.1) saturate(1.2) brightness(0.85);"></canvas>
 
     <!-- AR close button: shown only while AR is running, sits above arCanvas -->
     <button id="arCloseBtn" onclick="closeAR()"

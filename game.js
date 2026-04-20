@@ -363,7 +363,8 @@ const game = {
     barrierMesh: null,
     nukeEffect: null,
     playerName: 'PILOT',
-    godMode: false
+    godMode: false,
+    difficulty: 'hard'
 };
 
 const playerStats = {
@@ -446,6 +447,64 @@ const bossTypes = {
 };
 
 // ============================================================================
+// ============================================================================
+// DIFFICULTY CONFIG
+// ============================================================================
+
+const difficultySettings = {
+    medium: {
+        id: 'medium',
+        name: 'CORSAIR',
+        enemyHealthMult:    0.58,
+        enemySpeedMult:     0.88,
+        dropRate:           0.44,
+        enemyDamageMult:    0.75,
+        bossAttackRateMult: 1.40,
+        bossHealthMult:     0.68,
+        waveEnemyMult:      0.72,
+        spawnDelay:         400,
+        bannedAttacks:      ['summon_minions', 'buzzsaw_swarm', 'barrier_wall'],
+    },
+    hard: {
+        id: 'hard',
+        name: 'VANGUARD',
+        enemyHealthMult:    1.0,
+        enemySpeedMult:     1.0,
+        dropRate:           0.25,
+        enemyDamageMult:    1.0,
+        bossAttackRateMult: 1.0,
+        bossHealthMult:     1.0,
+        waveEnemyMult:      1.0,
+        spawnDelay:         350,
+        bannedAttacks:      [],
+    },
+    hell: {
+        id: 'hell',
+        name: 'VOID REAPER',
+        enemyHealthMult:    1.0,
+        enemySpeedMult:     1.35,
+        dropRate:           0.09,
+        enemyDamageMult:    2.0,
+        bossAttackRateMult: 0.60,
+        bossHealthMult:     1.55,
+        waveEnemyMult:      1.70,
+        spawnDelay:         190,
+        bannedAttacks:      [],
+    }
+};
+
+function getDiffMod() {
+    return difficultySettings[game.difficulty] || difficultySettings.hard;
+}
+
+function setDifficulty(diff) {
+    game.difficulty = diff;
+    ['medium', 'hard', 'hell'].forEach(d => {
+        const btn = document.getElementById('diff-btn-' + d);
+        if (btn) btn.classList.toggle('diff-active', d === diff);
+    });
+}
+
 // POWERUP TYPES CONFIG
 // ============================================================================
 
@@ -708,8 +767,9 @@ function createEnemy(type, x, y) {
     group.position.set(x, y, 0);
     scene.add(group);
     const waveMult = 1 + (game.wave * 0.1);
-    const scaledHealth = Math.ceil(config.health * waveMult);
-    const scaledSpeed = config.speed * (1 + game.wave * 0.03);
+    const _dm = getDiffMod();
+    const scaledHealth = Math.ceil(config.health * waveMult * _dm.enemyHealthMult);
+    const scaledSpeed = config.speed * (1 + game.wave * 0.03) * _dm.enemySpeedMult;
 
     return { 
         mesh: group, type, x, y, vx: 0, vy: 0, 
@@ -766,7 +826,8 @@ function createBoss(type) {
     group.position.set(0, 6, 0);
     scene.add(group);
     const waveMult = 1 + (game.wave * 0.15);
-    const scaledHealth = Math.floor(config.health * waveMult);
+    const _bDm = getDiffMod();
+    const scaledHealth = Math.floor(config.health * waveMult * _bDm.bossHealthMult);
     return { 
         mesh: group, type, x: 0, y: 6, 
         health: scaledHealth, maxHealth: scaledHealth, 
@@ -896,7 +957,7 @@ function getWaveConfig(wave) {
         };
     }
 
-    const enemyCount = 15 + wave * 4;
+    const enemyCount = Math.ceil((15 + wave * 4) * getDiffMod().waveEnemyMult);
     const types = ['basic'];
     if (wave >= 2) types.push('moving');
     if (wave >= 3) types.push('fast');
@@ -984,7 +1045,7 @@ function startWave() {
                     EntityAnimator.spawn(enemy, 400);
                     game.enemies.push(enemy);
                     game.totalEnemiesSpawned++;
-                }, i * 350);
+                }, i * getDiffMod().spawnDelay);
             }
         }
     }
@@ -1249,7 +1310,7 @@ function updateEnemyBeams() {
         if (game.player && checkCollision(b, game.player) && !playerStats.invulnerable) {
             if (now - b.damageTimer > 400) {
                 b.damageTimer = now;
-                handlePlayerHit(1);
+                handlePlayerHit(Math.ceil(1 * getDiffMod().enemyDamageMult));
             }
         }
         
@@ -1387,7 +1448,7 @@ function killEnemy(e, index) {
     createExplosion(e.x, e.y, 0xff0000, 14, 1.2);
     GameFeel.shake(0.4);
     game.score += e.config.score;
-    if (Math.random() < 0.25) game.powerups.push(createPowerup(e.x, e.y));
+    if (Math.random() < getDiffMod().dropRate) game.powerups.push(createPowerup(e.x, e.y));
     const enemy = game.enemies[index];
     game.enemies.splice(index, 1);
     EntityAnimator.die(enemy, 250, () => {
@@ -1553,7 +1614,7 @@ function updateEnemies() {
         if (game.player && checkCollision(e, game.player) && !playerStats.invulnerable) {
             if (config.suicide) {
                 // Kamikaze: deal damage and self-destruct
-                handlePlayerHit(config.damage);
+                handlePlayerHit(Math.ceil(config.damage * getDiffMod().enemyDamageMult));
                 createExplosion(e.x, e.y, 0xff6600, 14, 1.5);
                 GameFeel.shake(1.0);
                 game.score += e.config.score;
@@ -1567,7 +1628,7 @@ function updateEnemies() {
                 const contactCd = config.chainsaw ? 300 : 800;
                 if (!e.contactTimer || now - e.contactTimer > contactCd) {
                     e.contactTimer = now;
-                    handlePlayerHit(config.damage);
+                    handlePlayerHit(Math.ceil(config.damage * getDiffMod().enemyDamageMult));
                 }
             }
         }
@@ -1678,13 +1739,22 @@ function updateBoss() {
         b.shieldMesh.material.opacity = 0.25 + Math.sin(now / 200) * 0.15;
     }
 
-    if (now - b.lastAttack > (config.attackRate || 800) / game.timeScale) {
+    if (now - b.lastAttack > (config.attackRate || 800) * getDiffMod().bossAttackRateMult / game.timeScale) {
         b.lastAttack = now;
         b.attackPhase = (b.attackPhase + 1);
         
-        const attacks = config.attacks[0] === 'everything' 
+        const _diffAttackMod = getDiffMod();
+        let attacks = config.attacks[0] === 'everything' 
             ? ['spread', 'laser', 'horizontal', 'rapid', 'homing', 'spiral', 'summon_minions', 'buzzsaw_swarm', 'laser_snipe', 'barrier_wall', 'spiral_aimed'] 
-            : config.attacks;
+            : [...config.attacks];
+        if (_diffAttackMod.bannedAttacks.length > 0) {
+            attacks = attacks.filter(a => !_diffAttackMod.bannedAttacks.includes(a));
+            if (attacks.length === 0) attacks = ['spread', 'rapid', 'homing'];
+        }
+        // Hell mode: extra summon at low boss HP
+        if (_diffAttackMod.id === 'hell' && b.health < b.maxHealth * 0.4 && Math.random() < 0.3) {
+            attacks.push('summon_minions', 'buzzsaw_swarm');
+        }
         const attack = attacks[b.attackPhase % attacks.length];
 
         switch (attack) {
@@ -2113,7 +2183,7 @@ function updateBullets() {
             for (let k = 0; k < 8; k++) { const angle = (Math.PI * 2 / 8) * k; game.enemyBullets.push(createBullet(b.x, b.y, Math.cos(angle) * 0.1, Math.sin(angle) * 0.1, false)); }
         }
         if (game.player && checkCollision(b, game.player) && !playerStats.invulnerable) {
-            handlePlayerHit(b.damage);
+            handlePlayerHit(Math.ceil(b.damage * getDiffMod().enemyDamageMult));
             scene.remove(b.mesh);
             ResourceManager.disposeMesh(b.mesh);
             game.enemyBullets.splice(i, 1);
