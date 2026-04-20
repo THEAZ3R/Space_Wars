@@ -386,10 +386,10 @@ const playerStats = {
     nukeCount: 0
 };
 
-const bossEncounterOrder = ['mini3', 'mini1', 'mini2'];
+const bossEncounterOrder = ['mini3', 'mini1', 'mini2', 'boss4', 'boss5', 'boss6'];
 function getBossForEncounter(encounterNum) {
-    if (encounterNum <= 3) return bossEncounterOrder[encounterNum - 1];
-    return bossEncounterOrder[(encounterNum - 1) % 3];
+    if (encounterNum <= 6) return bossEncounterOrder[encounterNum - 1];
+    return bossEncounterOrder[(encounterNum - 1) % 6];
 }
 
 // ============================================================================
@@ -428,7 +428,7 @@ const enemyTypes = {
     ghost: { name: 'Ghost', health: 2, speed: 0.04, score: 400, material: null, size: { w: 0.6, h: 0.6, d: 0.3 }, pattern: 'phase', fireRate: 1500, damage: 1, phase: true },
     bomber: { name: 'Bomber', health: 3, speed: 0.02, score: 600, material: null, size: { w: 0.8, h: 0.8, d: 0.3 }, pattern: 'drop', fireRate: 1000, damage: 2, bomb: true },
     saw: { name: 'Sawblade', health: 4, speed: 0.04, score: 500, material: null, size: { w: 0.9, h: 0.9, d: 0.3 }, pattern: 'rush', fireRate: 99999, damage: 2, chainsaw: true },
-    suicide: { name: 'Kamikaze', health: 7, speed: 0.1, score: 250, material: null, size: { w: 0.6, h: 0.6, d: 0.3 }, pattern: 'suicide', fireRate: 0, damage: 2, suicide: true }
+    suicide: { name: 'Kamikaze', health: 7, speed: 0.28, score: 250, material: null, size: { w: 0.6, h: 0.6, d: 0.3 }, pattern: 'suicide', fireRate: 0, damage: 2, suicide: true }
 };
 
 // ============================================================================
@@ -436,10 +436,13 @@ const enemyTypes = {
 // ============================================================================
 
 const bossTypes = {
-    mini1: { name: 'CRUSHER', health: 50, material: null, pattern: 'sweep', attacks: ['spread', 'laser'] },
-    mini2: { name: 'DESTROYER', health: 75, material: null, pattern: 'bounce', attacks: ['rapid', 'homing'] },
-    mini3: { name: 'ANNIHILATOR', health: 100, material: null, pattern: 'teleport', attacks: ['spiral', 'laser', 'spread'] },
-    final: { name: 'COSMIC OVERLORD', health: 200, material: null, pattern: 'all', attacks: ['everything'] }
+    mini1: { name: 'CRUSHER',            health:  50, material: null, pattern: 'sweep',           attacks: ['spread', 'laser', 'summon_minions', 'buzzsaw_swarm'],                            attackRate:  850 },
+    mini2: { name: 'DESTROYER',          health:  75, material: null, pattern: 'bounce',          attacks: ['rapid', 'homing', 'laser_snipe', 'barrier_wall'],                              attackRate:  800 },
+    mini3: { name: 'ANNIHILATOR',        health: 100, material: null, pattern: 'teleport',        attacks: ['spiral_aimed', 'spread', 'buzzsaw_swarm', 'summon_minions'],                   attackRate:  800, laserRate: 8000, laserDuration: 1500 },
+    final: { name: 'COSMIC OVERLORD',    health: 200, material: null, pattern: 'all',             attacks: ['everything'],                                                                  attackRate:  600 },
+    boss4: { name: 'VOID HERALD',        health: 130, material: null, pattern: 'figure8',         attacks: ['flower', 'vortex', 'ring', 'phase_trail', 'laser_snipe', 'buzzsaw_swarm'],     attackRate: 1000 },
+    boss5: { name: 'NEBULA TYRANT',      health: 160, material: null, pattern: 'diag_bounce',     attacks: ['supernova', 'buzzsaw_rain', 'cross_laser', 'twin_spiral', 'summon_minions', 'barrier_wall'], attackRate: 1100 },
+    boss6: { name: 'ECLIPSE SOVEREIGN',  health: 190, material: null, pattern: 'orbit',           attacks: ['pulse_wave', 'sniper_burst', 'cage', 'twin_spiral', 'spiral_aimed', 'laser_snipe', 'buzzsaw_swarm', 'summon_minions'], attackRate: 900 },
 };
 
 // ============================================================================
@@ -574,6 +577,9 @@ try {
     bossTypes.mini2.material = materials.boss;
     bossTypes.mini3.material = materials.boss;
     bossTypes.final.material = new THREE.MeshBasicMaterial({ color: 0x6600ff });
+    bossTypes.boss4.material = new THREE.MeshBasicMaterial({ color: 0x8800ff });
+    bossTypes.boss5.material = new THREE.MeshBasicMaterial({ color: 0xcc0044 });
+    bossTypes.boss6.material = new THREE.MeshBasicMaterial({ color: 0x0088cc });
     powerupTypes[0].material = materials.powerupScore;
     powerupTypes[1].material = materials.powerupScore;
     powerupTypes[2].material = materials.powerupScore;
@@ -718,9 +724,45 @@ function createEnemy(type, x, y) {
 function createBoss(type) {
     const config = bossTypes[type];
     const group = new THREE.Group();
-    group.add(createBox(2, 2, 0.5, config.material, 0, 0, 0));
-    group.add(createBox(0.5, 1, 0.3, config.material, -1.5, 0, 0), createBox(0.5, 1, 0.3, config.material, 1.5, 0, 0));
-    group.add(createBox(0.8, 0.8, 0.6, new THREE.MeshBasicMaterial({ color: 0xff0000 }), 0, 0, 0.2));
+
+    if (type === 'boss4') {
+        // VOID HERALD — angular, crystalline void-diamond
+        const mat = config.material;
+        const accent = new THREE.MeshBasicMaterial({ color: 0xff00ff });
+        group.add(createBox(1.8, 1.8, 0.5, mat, 0, 0, 0));         // core diamond
+        group.add(createBox(2.8, 0.25, 0.3, mat, 0, 0, 0));        // wide horizontal fin
+        group.add(createBox(0.25, 2.8, 0.3, mat, 0, 0, 0));        // tall vertical spike
+        group.add(createBox(0.5, 0.5, 0.7, accent, 0, 0, 0.2));    // glowing core
+        group.add(createBox(0.15, 0.15, 0.5, accent, -1.0, 0, 0.1));
+        group.add(createBox(0.15, 0.15, 0.5, accent,  1.0, 0, 0.1));
+    } else if (type === 'boss5') {
+        // NEBULA TYRANT — massive multi-winged dreadnought
+        const mat = config.material;
+        const core  = new THREE.MeshBasicMaterial({ color: 0xff0066 });
+        const wing  = new THREE.MeshBasicMaterial({ color: 0x880033 });
+        group.add(createBox(2.2, 2.2, 0.6, mat, 0, 0, 0));         // large hull
+        group.add(createBox(0.7, 1.4, 0.35, wing, -2.0,  0.2, 0)); // left wing
+        group.add(createBox(0.7, 1.4, 0.35, wing,  2.0,  0.2, 0)); // right wing
+        group.add(createBox(1.0, 0.3,  0.3, wing, -2.0,  0.9, 0)); // left tip
+        group.add(createBox(1.0, 0.3,  0.3, wing,  2.0,  0.9, 0)); // right tip
+        group.add(createBox(0.9, 0.9,  0.8, core,  0, 0, 0.25));   // pulsing core
+    } else if (type === 'boss6') {
+        // ECLIPSE SOVEREIGN — crystalline ring-cross
+        const mat = config.material;
+        const ring  = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+        const inner = new THREE.MeshBasicMaterial({ color: 0x004466 });
+        group.add(createBox(2.4, 0.45, 0.5, mat, 0, 0, 0));        // horizontal bar
+        group.add(createBox(0.45, 2.4, 0.5, mat, 0, 0, 0));        // vertical bar
+        group.add(createBox(1.5, 0.25, 0.35, inner, 0,  0.9, 0));  // upper cross
+        group.add(createBox(1.5, 0.25, 0.35, inner, 0, -0.9, 0));  // lower cross
+        group.add(createBox(0.8, 0.8,  0.8,  ring,  0,  0, 0.25)); // glowing orb
+    } else {
+        // Default boss mesh (mini1, mini2, mini3, final)
+        group.add(createBox(2, 2, 0.5, config.material, 0, 0, 0));
+        group.add(createBox(0.5, 1, 0.3, config.material, -1.5, 0, 0), createBox(0.5, 1, 0.3, config.material, 1.5, 0, 0));
+        group.add(createBox(0.8, 0.8, 0.6, new THREE.MeshBasicMaterial({ color: 0xff0000 }), 0, 0, 0.2));
+    }
+
     group.position.set(0, 6, 0);
     scene.add(group);
     const waveMult = 1 + (game.wave * 0.15);
@@ -731,10 +773,15 @@ function createBoss(type) {
         config, lastAttack: 0, attackPhase: 0, 
         width: 2.5, height: 2,
         lastTeleport: Date.now(),
+        lastLaserAttack: 0,
         hasShieldActivated: false,
         shieldHealth: 0,
         shieldMax: 0,
-        shieldMesh: null
+        shieldMesh: null,
+        // for diag_bounce pattern
+        vbx: 0.06, vby: 0.03,
+        // for orbit pattern
+        orbitAngle: 0,
     };
 }
 
@@ -752,11 +799,11 @@ function createBullet(x, y, vx, vy, isPlayer, isLaser = false, isHoming = false)
     return { mesh, x, y, vx, vy, isPlayer, isLaser, isHoming, damage: isPlayer ? 1 : (isLaser ? 2 : 1), life: 3000 };
 }
 
-function createEnemyBeam(x, y) {
+function createEnemyBeam(x, y, life = 2500) {
     const length = 30;
     const mesh = createBox(0.4, length, 0.2, materials.enemyBeam, x, y - length / 2 + 1, 0);
     scene.add(mesh);
-    return { mesh, x, y: y - length / 2, width: 0.4, height: length, life: 2500, created: Date.now(), damageTimer: 0 };
+    return { mesh, x, y: y - length / 2, width: 0.4, height: length, life, created: Date.now(), damageTimer: 0 };
 }
 
 function createHorizontalBeam(y, direction) {
@@ -928,6 +975,8 @@ function startWave() {
             for (let i = 0; i < config.enemies; i++) {
                 setTimeout(() => {
                     if (!game.isPlaying || game.isPaused) return;
+                    // If a nuke snapped the counters, skip any remaining queued spawns
+                    if (game.totalEnemiesSpawned >= game.totalEnemiesInWave) return;
                     const type = config.types[Math.floor(Math.random() * config.types.length)];
                     const x = (Math.random() - 0.5) * 12;
                     const y = 8 + Math.random() * 2;
@@ -1440,32 +1489,32 @@ function updateEnemies() {
         const e = game.enemies[i];
         const config = e.config;
         switch (config.pattern) {
-            case 'static': e.y -= e.speed * game.timeScale * 0.3; break;
+            case 'static': e.y -= e.speed * game.timeScale * 0.08; break;
             case 'edges':
                 if (e.x < -8) e.direction = 1;
                 if (e.x > 8) e.direction = -1;
                 e.x += e.direction * e.speed * game.timeScale;
-                e.y -= e.speed * 0.2 * game.timeScale;
+                e.y -= e.speed * 0.06 * game.timeScale;
                 break;
-            case 'chase': e.x += Math.sign(game.player.x - e.x) * e.speed * game.timeScale; e.y -= e.speed * 0.5 * game.timeScale; break;
+            case 'chase': e.x += Math.sign(game.player.x - e.x) * e.speed * game.timeScale; e.y -= e.speed * 0.12 * game.timeScale; break;
             case 'follow': {
                 const fdx = game.player.x - e.x, fdy = game.player.y - e.y;
                 const dist = Math.sqrt(fdx * fdx + fdy * fdy);
-                if (dist > 0) { e.x += (fdx / dist) * e.speed * game.timeScale; e.y += (fdy / dist) * e.speed * game.timeScale * 0.5; }
+                if (dist > 0) { e.x += (fdx / dist) * e.speed * game.timeScale; e.y += (fdy / dist) * e.speed * game.timeScale * 0.18; }
                 break;
             }
             case 'bounce':
                 e.x += e.direction * e.speed * game.timeScale;
                 if (Math.abs(e.x) > 8) e.direction *= -1;
-                e.y -= e.speed * 0.3 * game.timeScale;
+                e.y -= e.speed * 0.07 * game.timeScale;
                 break;
             case 'phase':
                 e.phaseTimer += 16 * game.timeScale;
                 e.mesh.children.forEach(child => { if (child.material && child.material.opacity !== undefined) child.material.opacity = 0.3 + Math.sin(e.phaseTimer / 200) * 0.4; });
-                e.y -= e.speed * game.timeScale * 0.4;
+                e.y -= e.speed * game.timeScale * 0.1;
                 break;
             case 'drop':
-                e.y -= e.speed * game.timeScale;
+                e.y -= e.speed * game.timeScale * 0.3;
                 if (e.y < game.player.y + 2 && e.y > game.player.y - 2 && !e.hasDroppedBomb) {
                     e.hasDroppedBomb = true;
                     const bomb = createBullet(e.x, e.y - 0.5, 0, -0.12, false);
@@ -1502,21 +1551,27 @@ function updateEnemies() {
             }
         }
         if (game.player && checkCollision(e, game.player) && !playerStats.invulnerable) {
-            if (config.chainsaw || config.suicide) {
+            if (config.suicide) {
+                // Kamikaze: deal damage and self-destruct
                 handlePlayerHit(config.damage);
-                if (config.suicide) {
-                    createExplosion(e.x, e.y, 0xff6600, 14, 1.5);
-                    GameFeel.shake(1.0);
-                    game.score += e.config.score;
-                    scene.remove(e.mesh);
-                    ResourceManager.disposeMesh(e.mesh);
-                    game.enemies.splice(i, 1);
-                    game.enemiesKilled++;
-                    continue;
+                createExplosion(e.x, e.y, 0xff6600, 14, 1.5);
+                GameFeel.shake(1.0);
+                game.score += e.config.score;
+                scene.remove(e.mesh);
+                ResourceManager.disposeMesh(e.mesh);
+                game.enemies.splice(i, 1);
+                game.enemiesKilled++;
+                continue;
+            } else {
+                // All other enemy types: deal contact damage with cooldown
+                const contactCd = config.chainsaw ? 300 : 800;
+                if (!e.contactTimer || now - e.contactTimer > contactCd) {
+                    e.contactTimer = now;
+                    handlePlayerHit(config.damage);
                 }
             }
         }
-        if (e.y < -10) {
+        if (e.y < -12) {
             scene.remove(e.mesh);
             ResourceManager.disposeMesh(e.mesh);
             game.enemies.splice(i, 1);
@@ -1533,14 +1588,55 @@ function updateBoss() {
     if (!game.boss) return;
     const b = game.boss, now = Date.now(), config = b.config;
 
+    // Enrage multiplier — bosses move faster below 30% HP
+    const hpRatio = b.health / b.maxHealth;
+    const enrage = hpRatio < 0.3 ? 1.6 : hpRatio < 0.55 ? 1.2 : 1.0;
+
     switch (config.pattern) {
-        case 'sweep': b.x = Math.sin(now / 1000) * 6; break;
-        case 'bounce': b.x += Math.sin(now / 500) * 0.1; b.y = 6 + Math.sin(now / 800) * 1; break;
-        case 'teleport': if (now - b.lastAttack > 3000) b.x = (Math.random() - 0.5) * 10; break;
-        case 'all': 
-            b.x = Math.sin(now / 800) * 4; 
-            b.y = 5 + Math.cos(now / 600) * 2; 
+        case 'sweep': b.x = Math.sin(now / (900 / enrage)) * 6.5; break;
+        case 'bounce': 
+            b.x += Math.sin(now / (400 / enrage)) * 0.12 * enrage; 
+            b.y = 6 + Math.sin(now / (600 / enrage)) * 1.6; 
             break;
+        case 'teleport': 
+            if (now - b.lastAttack > (2500 / enrage)) { 
+                b.x = (Math.random() - 0.5) * 11; 
+                b.y = 3.5 + Math.random() * 3.5;
+                EntityAnimator.flash(b, 100);
+                createExplosion(b.x, b.y, 0xff00ff, 4, 0.5);
+            } 
+            break;
+        case 'all': 
+            b.x = Math.sin(now / (700 / enrage)) * 5; 
+            b.y = 5 + Math.cos(now / (500 / enrage)) * 2.2; 
+            break;
+        case 'figure8':
+            b.x = Math.sin(now / (950 / enrage)) * 6;
+            b.y = 5.5 + Math.sin(now / (475 / enrage)) * 1.8;
+            break;
+        case 'diag_bounce':
+            b.x += b.vbx * enrage;
+            b.y += b.vby * enrage;
+            if (b.x >  7.0 || b.x < -7.0) b.vbx *= -1;
+            if (b.y >  7.8 || b.y <  3.5) b.vby *= -1;
+            break;
+        case 'orbit':
+            b.orbitAngle += 0.014 * enrage;
+            b.x = Math.cos(b.orbitAngle) * 5.5;
+            b.y = 5.5 + Math.sin(b.orbitAngle * 2) * 1.8;
+            break;
+    }
+
+    // Enrage warnings (one-shot flags)
+    if (!b.enraged30 && hpRatio < 0.30) {
+        b.enraged30 = true;
+        showFloatingText('⚡ ENRAGED ⚡', b.x, b.y + 2, 0xff2200);
+        GameFeel.shake(1.0);
+        createExplosion(b.x, b.y, 0xff2200, 20, 1.5);
+    } else if (!b.enraged55 && hpRatio < 0.55) {
+        b.enraged55 = true;
+        showFloatingText('! RAGE !', b.x, b.y + 2, 0xff8800);
+        GameFeel.shake(0.5);
     }
 
     if (b.type === 'final') {
@@ -1582,35 +1678,57 @@ function updateBoss() {
         b.shieldMesh.material.opacity = 0.25 + Math.sin(now / 200) * 0.15;
     }
 
-    if (now - b.lastAttack > 800 / game.timeScale) {
+    if (now - b.lastAttack > (config.attackRate || 800) / game.timeScale) {
         b.lastAttack = now;
         b.attackPhase = (b.attackPhase + 1);
         
         const attacks = config.attacks[0] === 'everything' 
-            ? ['spread', 'laser', 'horizontal', 'rapid', 'homing', 'spiral'] 
+            ? ['spread', 'laser', 'horizontal', 'rapid', 'homing', 'spiral', 'summon_minions', 'buzzsaw_swarm', 'laser_snipe', 'barrier_wall', 'spiral_aimed'] 
             : config.attacks;
         const attack = attacks[b.attackPhase % attacks.length];
 
         switch (attack) {
-            case 'spread': 
-                for (let i = -2; i <= 2; i++) 
-                    game.enemyBullets.push(createBullet(b.x, b.y - 1, i * 0.05, -0.12, false)); 
+            case 'spread': {
+                const sp = game.player;
+                const sBase = sp ? Math.atan2(sp.y - b.y, sp.x - b.x) : -Math.PI / 2;
+                for (let i = -2; i <= 2; i++) {
+                    const ang = sBase + i * 0.18;
+                    game.enemyBullets.push(createBullet(b.x, b.y - 1, Math.cos(ang) * 0.12, Math.sin(ang) * 0.12, false));
+                }
                 break;
+            }
             
             case 'laser': 
                 for (let i = 0; i < 3; i++) 
                     setTimeout(() => { game.enemyBeams.push(createEnemyBeam(b.x - 1 + i, b.y - 1)); }, i * 150); 
                 break;
 
-            case 'horizontal':
+            case 'horizontal': {
                 const dir = Math.random() > 0.5 ? 1 : -1;
-                const hy = b.y + (Math.random() - 0.5) * 5;
+                const pRef = game.player;
+                const hy = pRef ? pRef.y + (Math.random() - 0.5) * 2.5 : -4 + (Math.random() - 0.5) * 3;
                 game.enemyBeams.push(createHorizontalBeam(hy, dir));
+                if (Math.random() < 0.45) {
+                    setTimeout(() => {
+                        if (!game.boss) return;
+                        const pRef2 = game.player;
+                        const hy2 = pRef2 ? pRef2.y + (Math.random() - 0.5) * 2.5 : hy - 1.5;
+                        game.enemyBeams.push(createHorizontalBeam(hy2, -dir));
+                    }, 600);
+                }
                 break;
+            }
             
             case 'rapid': 
                 for (let i = 0; i < 5; i++) 
-                    setTimeout(() => { const angle = (Math.random() - 0.5) * 0.5; game.enemyBullets.push(createBullet(b.x, b.y - 1, angle, -0.15, false)); }, i * 50); 
+                    setTimeout(() => { 
+                        if (!game.boss || !game.player) return;
+                        const rp = game.player;
+                        const rdx = rp.x - b.x, rdy = rp.y - b.y;
+                        const rd = Math.sqrt(rdx*rdx + rdy*rdy) || 1;
+                        const jitter = (Math.random() - 0.5) * 0.25;
+                        game.enemyBullets.push(createBullet(b.x, b.y - 1, (rdx/rd)*0.15 + jitter, (rdy/rd)*0.15, false));
+                    }, i * 60); 
                 break;
             
             case 'homing': { 
@@ -1626,6 +1744,297 @@ function updateBoss() {
                     game.enemyBullets.push(createBullet(b.x, b.y - 1, Math.cos(angle) * 0.1, Math.sin(angle) * 0.1, false)); 
                 } 
                 break;
+
+            case 'summon_minions': {
+                // Boss spawns 3 fast chasers that target the player
+                showFloatingText('SUMMONING!', b.x, b.y + 2, 0xff0000);
+                GameFeel.shake(0.4);
+                const minionTypes = ['fast', 'chaser', 'suicide'];
+                for (let m = 0; m < 3; m++) {
+                    setTimeout(() => {
+                        if (!game.boss) return;
+                        const angle = (Math.PI * 2 / 3) * m + now / 1000;
+                        const mx = b.x + Math.cos(angle) * 2;
+                        const my = b.y + Math.sin(angle) * 1.5;
+                        const mType = minionTypes[m % minionTypes.length];
+                        const minion = createEnemy(mType, mx, my);
+                        EntityAnimator.spawn(minion, 350);
+                        game.enemies.push(minion);
+                        createExplosion(mx, my, 0xff0000, 6, 0.6);
+                    }, m * 200);
+                }
+                break;
+            }
+
+            case 'buzzsaw_swarm': {
+                // Spawn 4 buzzsaws orbiting the boss briefly, then hurl toward player
+                showFloatingText('BUZZSAW!', b.x, b.y + 2, 0xffaa00);
+                const buzzCount = 4;
+                for (let bz = 0; bz < buzzCount; bz++) {
+                    const orbitAngle0 = (Math.PI * 2 / buzzCount) * bz;
+                    const delay = bz * 120;
+                    setTimeout(() => {
+                        if (!game.boss || !game.player) return;
+                        // A fast bullet that starts orbiting then homes
+                        const bx = b.x + Math.cos(orbitAngle0) * 2.0;
+                        const by = b.y + Math.sin(orbitAngle0) * 1.5;
+                        const p = game.player;
+                        const ddx = p.x - bx, ddy = p.y - by;
+                        const dd = Math.sqrt(ddx*ddx + ddy*ddy) || 1;
+                        const buzz = createBullet(bx, by, (ddx/dd)*0.17, (ddy/dd)*0.17, false);
+                        buzz.isHoming = true;
+                        buzz.mesh.scale.set(1.8, 1.8, 1.8);
+                        game.enemyBullets.push(buzz);
+                        createExplosion(bx, by, 0xffaa00, 5, 0.5);
+                    }, delay);
+                }
+                break;
+            }
+
+            case 'laser_snipe': {
+                // Pre-aim laser warning, then 2 fast vertical beams at player X
+                if (!game.player) break;
+                const snipeX = game.player.x;
+                showFloatingText('⚡ SNIPE ⚡', snipeX, b.y - 1, 0xff00ff);
+                // Warning jitter — thin beam telegraphs location
+                setTimeout(() => {
+                    if (!game.boss || !game.player) return;
+                    const finalX = game.player.x; // lock on last-second position
+                    game.enemyBeams.push(createEnemyBeam(finalX - 0.3, b.y - 0.5, 1800));
+                    game.enemyBeams.push(createEnemyBeam(finalX + 0.3, b.y - 0.5, 1800));
+                }, 550);
+                break;
+            }
+
+            case 'barrier_wall': {
+                // Two slow horizontal beams that form a closing gate; leave a gap above or below player
+                if (!game.player) break;
+                const p = game.player;
+                const gap = Math.random() < 0.5 ? p.y + 1.5 : p.y - 1.5;
+                // Three horizontal beams at different Ys with a gap at player's level
+                [-3, -5, -1].forEach((offset, idx) => {
+                    const wallY = p.y + offset;
+                    if (Math.abs(wallY - gap) < 1.2) return; // leave the gap
+                    setTimeout(() => {
+                        if (!game.boss) return;
+                        const d2 = idx % 2 === 0 ? 1 : -1;
+                        game.enemyBeams.push(createHorizontalBeam(wallY, d2));
+                    }, idx * 250);
+                });
+                break;
+            }
+
+            case 'spiral_aimed': {
+                // Rotating spiral that ALSO fires 2 aimed bullets at player mid-burst
+                const saCount = 8;
+                for (let i = 0; i < saCount; i++) {
+                    const angle = (Math.PI * 2 / saCount) * i + now / 900;
+                    game.enemyBullets.push(createBullet(b.x, b.y - 1, Math.cos(angle) * 0.10, Math.sin(angle) * 0.10, false));
+                }
+                setTimeout(() => {
+                    if (!game.boss || !game.player) return;
+                    const p2 = game.player;
+                    const adx = p2.x - b.x, ady = p2.y - b.y;
+                    const ad = Math.sqrt(adx*adx + ady*ady) || 1;
+                    for (let k = 0; k < 2; k++) {
+                        const hb2 = createBullet(b.x, b.y - 1, (adx/ad)*0.18, (ady/ad)*0.18, false);
+                        hb2.isHoming = true;
+                        game.enemyBullets.push(hb2);
+                    }
+                }, 300);
+                break;
+            }
+            case 'flower': {
+                // Multi-layer rotating flower: 2 rings of 6 petals, offset and delayed
+                const petals = 6;
+                for (let layer = 0; layer < 2; layer++) {
+                    const rotOffset = (layer / 2) * (Math.PI / petals) + now / 2200;
+                    const spd = 0.09 + layer * 0.03;
+                    setTimeout(() => {
+                        for (let i = 0; i < petals; i++) {
+                            const ang = (Math.PI * 2 / petals) * i + rotOffset;
+                            game.enemyBullets.push(createBullet(b.x, b.y - 0.5, Math.cos(ang) * spd, Math.sin(ang) * spd, false));
+                        }
+                    }, layer * 220);
+                }
+                break;
+            }
+
+            case 'vortex': {
+                // 12 bullets fired in staggered outward spiral, each a bit faster
+                const vCount = 12;
+                for (let i = 0; i < vCount; i++) {
+                    setTimeout(() => {
+                        if (!game.boss) return;
+                        const ang = (Math.PI * 2 / vCount) * i + (b.attackPhase * 0.45);
+                        const spd = 0.06 + i * 0.007;
+                        game.enemyBullets.push(createBullet(b.x, b.y - 0.5, Math.cos(ang) * spd, Math.sin(ang) * spd, false));
+                    }, i * 35);
+                }
+                break;
+            }
+
+            case 'ring': {
+                // Dense ring of 18 bullets — every direction
+                const rCount = 18;
+                for (let i = 0; i < rCount; i++) {
+                    const ang = (Math.PI * 2 / rCount) * i;
+                    game.enemyBullets.push(createBullet(b.x, b.y - 0.5, Math.cos(ang) * 0.11, Math.sin(ang) * 0.11, false));
+                }
+                break;
+            }
+
+            case 'phase_trail': {
+                // Boss flickers to 3 new positions, spraying 8 bullets each time
+                for (let t = 0; t < 3; t++) {
+                    setTimeout(() => {
+                        if (!game.boss || game.boss !== b) return;
+                        b.x = (Math.random() - 0.5) * 10;
+                        b.y = 4.5 + Math.random() * 2.5;
+                        EntityAnimator.flash(b, 120);
+                        createExplosion(b.x, b.y, 0x8800ff, 6, 0.8);
+                        GameFeel.shake(0.3);
+                        for (let i = 0; i < 8; i++) {
+                            const ang = (Math.PI * 2 / 8) * i;
+                            game.enemyBullets.push(createBullet(b.x, b.y, Math.cos(ang) * 0.09, Math.sin(ang) * 0.09, false));
+                        }
+                    }, t * 420);
+                }
+                break;
+            }
+
+            // ── BOSS 5 — NEBULA TYRANT ────────────────────────────────────
+            case 'supernova': {
+                // 24-bullet nova ring, then 2 homing orbs follow
+                const novaCount = 24;
+                for (let i = 0; i < novaCount; i++) {
+                    const ang = (Math.PI * 2 / novaCount) * i;
+                    game.enemyBullets.push(createBullet(b.x, b.y, Math.cos(ang) * 0.13, Math.sin(ang) * 0.13, false));
+                }
+                setTimeout(() => {
+                    if (!game.boss) return;
+                    for (let k = 0; k < 2; k++) {
+                        const hb = createBullet(b.x + (k - 0.5) * 1.2, b.y - 1, 0, -0.07, false);
+                        hb.isHoming = true;
+                        game.enemyBullets.push(hb);
+                    }
+                }, 700);
+                break;
+            }
+
+            case 'buzzsaw_rain': {
+                // 4 spinning volleys of 5 bullets each, rotated by attack phase
+                for (let v = 0; v < 4; v++) {
+                    setTimeout(() => {
+                        if (!game.boss) return;
+                        const base = v * (Math.PI / 4) + b.attackPhase * 0.6;
+                        for (let i = 0; i < 5; i++) {
+                            const ang = base + i * (Math.PI * 2 / 5);
+                            game.enemyBullets.push(createBullet(b.x, b.y, Math.cos(ang) * 0.11, Math.sin(ang) * 0.11, false));
+                        }
+                    }, v * 160);
+                }
+                break;
+            }
+
+            case 'cross_laser': {
+                // 3 vertical beams + 2 crossing horizontal sweeps
+                for (let i = 0; i < 3; i++)
+                    setTimeout(() => { if (!game.boss) return; game.enemyBeams.push(createEnemyBeam(b.x - 1.2 + i * 1.2, b.y - 1)); }, i * 120);
+                setTimeout(() => {
+                    if (!game.boss) return;
+                    game.enemyBeams.push(createHorizontalBeam(b.y - 2,  1));
+                    game.enemyBeams.push(createHorizontalBeam(b.y - 3.5, -1));
+                }, 500);
+                break;
+            }
+
+            case 'twin_spiral': {
+                // Two spirals spinning in opposite directions simultaneously
+                const tCount = 7;
+                for (let i = 0; i < tCount; i++) {
+                    const ang1 =  (Math.PI * 2 / tCount) * i + now / 700;
+                    const ang2 = -(Math.PI * 2 / tCount) * i - now / 700;
+                    game.enemyBullets.push(createBullet(b.x, b.y - 0.5, Math.cos(ang1) * 0.10, Math.sin(ang1) * 0.10, false));
+                    game.enemyBullets.push(createBullet(b.x, b.y - 0.5, Math.cos(ang2) * 0.10, Math.sin(ang2) * 0.10, false));
+                }
+                break;
+            }
+
+            // ── BOSS 6 — ECLIPSE SOVEREIGN ────────────────────────────────
+            case 'pulse_wave': {
+                // 3 concentric rings fired in sequence, each faster and denser
+                for (let ring = 0; ring < 3; ring++) {
+                    setTimeout(() => {
+                        if (!game.boss) return;
+                        const pCount = 10 + ring * 5;
+                        const spd = 0.07 + ring * 0.03;
+                        for (let i = 0; i < pCount; i++) {
+                            const ang = (Math.PI * 2 / pCount) * i + ring * 0.2;
+                            game.enemyBullets.push(createBullet(b.x, b.y, Math.cos(ang) * spd, Math.sin(ang) * spd, false));
+                        }
+                    }, ring * 380);
+                }
+                break;
+            }
+
+            case 'sniper_burst': {
+                // 3 fast leading shots that predict player position
+                for (let i = 0; i < 3; i++) {
+                    setTimeout(() => {
+                        if (!game.boss || !game.player) return;
+                        const p = game.player;
+                        const dx = p.x - b.x, dy = p.y - b.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                        const travelT = dist / 0.22;
+                        const tx = p.x + (p.vx || 0) * travelT * 0.6;
+                        const ty = p.y + (p.vy || 0) * travelT * 0.6;
+                        const ldx = tx - b.x, ldy = ty - b.y;
+                        const ld = Math.sqrt(ldx * ldx + ldy * ldy) || 1;
+                        game.enemyBullets.push(createBullet(b.x, b.y - 0.5, (ldx / ld) * 0.22, (ldy / ld) * 0.22, false));
+                    }, i * 260);
+                }
+                break;
+            }
+
+            case 'cage': {
+                // 4 slow corner bullets, then a closing ring after a pause
+                const corners = [[-6.5, -6.5], [6.5, -6.5], [-6.5, 6.5], [6.5, 6.5]];
+                corners.forEach(([tx, ty]) => {
+                    const dx = tx - b.x, dy = ty - b.y;
+                    const d = Math.sqrt(dx * dx + dy * dy) || 1;
+                    game.enemyBullets.push(createBullet(b.x, b.y, (dx / d) * 0.07, (dy / d) * 0.07, false));
+                });
+                setTimeout(() => {
+                    // Fast aimed burst to punish staying still
+                    if (!game.boss || !game.player) return;
+                    for (let k = 0; k < 4; k++) {
+                        setTimeout(() => {
+                            if (!game.boss || !game.player) return;
+                            const dx = game.player.x - b.x, dy = game.player.y - b.y;
+                            const d = Math.sqrt(dx * dx + dy * dy) || 1;
+                            game.enemyBullets.push(createBullet(b.x, b.y - 0.5, (dx / d) * 0.14, (dy / d) * 0.14, false));
+                        }, k * 110);
+                    }
+                }, 650);
+                break;
+            }
+        }
+    }
+
+    // ── ANNIHILATOR — separate slow laser timer (10 s on, 1.5 s beam) ────
+    if (b.type === 'mini3') {
+        const laserRate     = config.laserRate     || 10000;
+        const laserDuration = config.laserDuration || 1500;
+        if (now - b.lastLaserAttack > laserRate) {
+            b.lastLaserAttack = now;
+            showFloatingText('LASER!', b.x, b.y + 2, 0xff00ff);
+            for (let i = 0; i < 3; i++) {
+                setTimeout(() => {
+                    if (!game.boss || game.boss !== b) return;
+                    game.enemyBeams.push(createEnemyBeam(b.x - 1 + i, b.y - 1, laserDuration));
+                }, i * 150);
+            }
         }
     }
 }
@@ -1639,10 +2048,10 @@ function updateBullets() {
         const b = game.bullets[i];
         // Soft homing: gently steer player bullets toward the closest enemy within ~1.5 units horizontally
         if (b.isPlayer && !b.isLaser && game.enemies.length > 0) {
-            let nearest = null, nearestDist = 1.6;
+            let nearest = null, nearestDist = 0.9;  // tighter detection window
             for (const e of game.enemies) {
                 const hdx = Math.abs(e.x - b.x);
-                if (e.y < b.y) continue; // only home toward enemies that are above the bullet
+                if (e.y < b.y) continue;
                 if (hdx < nearestDist) { nearestDist = hdx; nearest = e; }
             }
             if (!nearest && game.boss) {
@@ -1650,9 +2059,9 @@ function updateBullets() {
                 if (hdx < nearestDist && game.boss.y > b.y) nearest = game.boss;
             }
             if (nearest) {
-                const pull = 0.006 * (1 - nearestDist / 1.6); // stronger pull when closer
+                const pull = 0.0018 * (1 - nearestDist / 0.9); // much gentler nudge
                 b.vx += (nearest.x - b.x > 0 ? 1 : -1) * pull;
-                b.vx = Math.max(-0.18, Math.min(0.18, b.vx)); // cap sideways drift
+                b.vx = Math.max(-0.09, Math.min(0.09, b.vx)); // tight sideways cap
             }
         }
         b.x += b.vx * game.timeScale; b.y += b.vy * game.timeScale;
@@ -1832,6 +2241,7 @@ function activateNuke() {
     scene.add(blackholeMesh);
     game.nukeEffect = { mesh: blackholeMesh, scale: 0.1, maxScale: 15, duration: 2000, startTime: Date.now() };
 
+    const nukedCount = game.enemies.length;
     for (const e of game.enemies) {
         createExplosion(e.x, e.y, 0xffffff, 15, 1.5);
         game.score += e.config.score;
@@ -1842,6 +2252,15 @@ function activateNuke() {
     game.enemyBullets = [];
     game.enemyBeams.forEach(b => { scene.remove(b.mesh); ResourceManager.disposeMesh(b.mesh); });
     game.enemyBeams = [];
+
+    // Fix wave-completion: account for nuked enemies and stop queued spawns
+    game.enemiesKilled += nukedCount;
+    if (game.waveInProgress && !game.boss) {
+        // Snap both counters to totalEnemiesInWave so queued setTimeouts become no-ops
+        game.totalEnemiesSpawned = game.totalEnemiesInWave;
+        game.enemiesKilled     = game.totalEnemiesInWave;
+    }
+
     updateUI();
 }
 
@@ -2284,9 +2703,39 @@ const ARManager = {
         this.ctx = this.canvas.getContext('2d');
 
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
-            });
+            let stream = null;
+
+            // 1) Enumerate devices — pick a real webcam, skip DroidCam / virtual cameras
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(d => d.kind === 'videoinput');
+                // Prefer a device that is NOT DroidCam or a virtual/OBS camera
+                const virtualLabels = /droidcam|obs|virtual|manycam|vcam|snap camera|epoccam/i;
+                const realCam = videoDevices.find(d => d.label && !virtualLabels.test(d.label));
+                const targetDevice = realCam || videoDevices[0]; // fallback to first
+                if (targetDevice) {
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: { deviceId: { exact: targetDevice.deviceId }, width: { ideal: 640 }, height: { ideal: 480 } }
+                    });
+                }
+            } catch (_) {}
+
+            // 2) Progressive fallback if enumeration failed
+            if (!stream) {
+                const attempts = [
+                    { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+                    { facingMode: 'user' },
+                    {}
+                ];
+                for (const constraints of attempts) {
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia({ video: constraints });
+                        break;
+                    } catch (_) {}
+                }
+            }
+
+            if (!stream) throw new Error('No camera available');
             this.video.srcObject = stream;
             await this.video.play();
 
@@ -2341,7 +2790,7 @@ const ARManager = {
         for (let y = 0; y < h; y += 4) ctx.fillRect(0, y, w, 2);
 
         let centerX = w / 2;
-        let topY = h * 0.18;
+        let topY = h * 0.10;    // pushed higher on screen
         let faceW = w * 0.25;
         let faceH = h * 0.25;
 
@@ -2361,10 +2810,10 @@ const ARManager = {
             topY = minY * h;
 
             if (this.mode === 'win') {
-                this.drawCrown(ctx, centerX, topY - faceH * 0.05, faceW * 1.4, faceH * 0.65);
-                this.drawSparkles(ctx, centerX, topY - faceH * 0.2, faceW);
+                this.drawCrown(ctx, centerX, topY - faceH * 0.30, faceW * 1.4, faceH * 0.75);
+                this.drawSparkles(ctx, centerX, topY - faceH * 0.35, faceW);
             } else {
-                this.drawDunceCap(ctx, centerX, topY - faceH * 0.05, faceW * 1.1, faceH * 0.75);
+                this.drawDunceCap(ctx, centerX, topY - faceH * 0.30, faceW * 1.1, faceH * 0.85);
                 this.drawTears(ctx, lm, w, h);
                 this.drawFrown(ctx, lm, w, h);
             }
