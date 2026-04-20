@@ -27,7 +27,47 @@ const SoundManager = {
     load(name, path) {
         const audio = new Audio(path);
         audio.preload = 'auto';
+        audio.addEventListener('error', () => { this._synthFallback(name); }, { once: true });
+        const timeoutId = setTimeout(() => {
+            if (!audio.readyState || audio.readyState < 1) this._synthFallback(name);
+        }, 3000);
+        audio.addEventListener('canplaythrough', () => clearTimeout(timeoutId), { once: true });
         this.sounds[name] = audio;
+    },
+
+    _synthFallback(name) {
+        const synthDefs = {
+            shoot:     { freq: 800,  type: 'square',   dur: 0.08, vol: 0.15 },
+            dash:      { freq: 400,  type: 'sawtooth', dur: 0.18, vol: 0.20 },
+            laser:     { freq: 1200, type: 'sine',      dur: 0.35, vol: 0.12 },
+            powerup:   { freq: 600,  type: 'triangle', dur: 0.25, vol: 0.20 },
+            nuke:      { freq: 150,  type: 'sawtooth', dur: 0.80, vol: 0.35 },
+            explosion: { freq: 100,  type: 'square',   dur: 0.45, vol: 0.30 },
+        };
+        const def = synthDefs[name];
+        if (!def) return;
+        const self = { _synth: true, _def: def, _name: name };
+        self.play = function(volumeScale = 1.0) {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.type = this._def.type;
+                osc.frequency.setValueAtTime(this._def.freq, ctx.currentTime);
+                if (this._name === 'explosion' || this._name === 'nuke') {
+                    osc.frequency.exponentialRampToValueAtTime(this._def.freq * 0.3, ctx.currentTime + this._def.dur);
+                }
+                gain.gain.setValueAtTime(this._def.vol * volumeScale, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + this._def.dur);
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + this._def.dur);
+                osc.onended = () => ctx.close();
+            } catch (e) {}
+        };
+        self.cloneNode = function() { return this; };
+        this.sounds[name] = self;
     },
 
     play(name, volume = 1.0) {
@@ -35,6 +75,10 @@ const SoundManager = {
         const sound = this.sounds[name];
         if (!sound) return;
         try {
+            if (sound._synth) {
+                sound.play(volume);
+                return;
+            }
             const clone = sound.cloneNode();
             clone.volume = volume;
             clone.play().catch(() => {});
@@ -429,7 +473,7 @@ const enemyTypes = {
     ghost: { name: 'Ghost', health: 2, speed: 0.04, score: 400, material: null, size: { w: 0.6, h: 0.6, d: 0.3 }, pattern: 'phase', fireRate: 1500, damage: 1, phase: true },
     bomber: { name: 'Bomber', health: 3, speed: 0.02, score: 600, material: null, size: { w: 0.8, h: 0.8, d: 0.3 }, pattern: 'drop', fireRate: 1000, damage: 2, bomb: true },
     saw: { name: 'Sawblade', health: 4, speed: 0.04, score: 500, material: null, size: { w: 0.9, h: 0.9, d: 0.3 }, pattern: 'rush', fireRate: 99999, damage: 2, chainsaw: true },
-    suicide: { name: 'Kamikaze', health: 7, speed: 0.28, score: 250, material: null, size: { w: 0.6, h: 0.6, d: 0.3 }, pattern: 'suicide', fireRate: 0, damage: 2, suicide: true }
+    suicide: { name: 'Kamikaze', health: 7, speed: 2.8, score: 250, material: null, size: { w: 0.6, h: 0.6, d: 0.3 }, pattern: 'suicide', fireRate: 0, damage: 2, suicide: true }
 };
 
 // ============================================================================
@@ -619,6 +663,7 @@ try {
         droneFin:       new THREE.MeshBasicMaterial({ color: 0x00aa00 }),
         bulletHoming:   new THREE.MeshBasicMaterial({ color: 0xff2222, blending: THREE.AdditiveBlending, transparent: true }),
         bulletBomb:     new THREE.MeshBasicMaterial({ color: 0xff8800 }),
+        flashWhite:     new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending }),
     };
 
     enemyTypes.basic.material = materials.enemyBasic;
@@ -902,7 +947,8 @@ function createExplosion(x, y, color, count = 8, intensity = 1) {
         });
     }
     if (intensity > 0.8) {
-        const flash = createBox(0.5, 0.5, 0.1, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending }), x, y, 0.3);
+        materials.flashWhite.opacity = 0.8;
+        const flash = createBox(0.5, 0.5, 0.1, materials.flashWhite, x, y, 0.3);
         scene.add(flash);
         game.particles.push({
             mesh: flash, x, y, vx: 0, vy: 0,
@@ -1185,6 +1231,8 @@ function updatePlayerLasers() {
 function updateChainsaws() {
     if (!game.player) return;
     const level = playerStats.chainsawLevel;
+
+    // ── Resize pool ───────────────────────────────────────────────────────────
     while (game.chainsaws.length > level) {
         const c = game.chainsaws.pop();
         scene.remove(c.mesh);
@@ -1197,65 +1245,208 @@ function updateChainsaws() {
         const blade = new THREE.Mesh(ResourceManager.getCylinder(0.45, 0.45, 0.08, 6), materials.chainsawBlade);
         blade.rotation.x = Math.PI / 2;
         group.add(blade);
-        for (let j = 0; j < 8; j++) {
+        // 12 teeth (upgraded from 8)
+        for (let j = 0; j < 12; j++) {
             const tooth = createBox(0.1, 0.2, 0.08, materials.chainsawBlade,
-                Math.cos(j / 8 * Math.PI * 2) * 0.5,
-                Math.sin(j / 8 * Math.PI * 2) * 0.5, 0);
+                Math.cos(j / 12 * Math.PI * 2) * 0.5,
+                Math.sin(j / 12 * Math.PI * 2) * 0.5, 0);
             group.add(tooth);
         }
         scene.add(group);
-        game.chainsaws.push({ mesh: group, angle: (Math.PI * 2 / (level || 1)) * game.chainsaws.length, damageTimers: new Map() });
+        game.chainsaws.push({
+            mesh: group,
+            angle: (Math.PI * 2 / (level || 1)) * game.chainsaws.length,
+            damageTimers: new Map(),
+            lastFling: Date.now() + Math.random() * 1200,
+            // State machine: 'orbiting' | 'flung' | 'returning'
+            state: 'orbiting',
+            // flung state
+            flingVx: 0, flingVy: 0,
+            flingX: 0, flingY: 0,
+            // returning state
+            returnStartX: 0, returnStartY: 0,
+            returnStartTime: 0, returnDuration: 500,
+        });
     }
     if (level === 0) return;
 
+    const now = Date.now();
+    const impactDamage = 8 + level * 4; // 12–20 depending on level
+
     game.chainsaws.forEach((c, idx) => {
-        const now = Date.now();
-        const time = now / 1000;
-        c.mesh.rotation.z -= 0.5 * game.timeScale;
-        c.mesh.rotation.y += 0.2 * game.timeScale;
-        c.mesh.rotation.x += 0.1 * game.timeScale;
-        c.angle += (0.05 + idx * 0.01) * game.timeScale;
-        const baseRadius = 5.5;
-        const chaoticX = Math.sin(time * 2.3 + idx) * 1.5 + Math.cos(time * 1.7 + idx * 2) * 1.0;
-        const chaoticY = Math.cos(time * 2.8 + idx) * 1.2 + Math.sin(time * 3.1 + idx * 1.5) * 0.8;
-        const radiusVar = Math.sin(time * 4.0 + c.angle) * 1.5;
-        const radius = baseRadius + radiusVar;
-        c.mesh.position.set(
-            game.player.x + Math.cos(c.angle) * radius + chaoticX,
-            game.player.y + Math.sin(c.angle * 1.3) * radius * 0.6 + chaoticY,
-            Math.sin(time * 5 + idx) * 0.5
-        );
+        const baseRadius = 2.0 + level * 0.22;
+
+        // ──────────────────────────────────────────────────────────────────────
+        // STATE: flung — fly toward target, check impacts
+        // ──────────────────────────────────────────────────────────────────────
+        if (c.state === 'flung') {
+            // Spin 2.5x faster during flight
+            c.mesh.rotation.z -= 1.4 * game.timeScale;
+            c.mesh.rotation.y += 0.6 * game.timeScale;
+
+            c.flingX += c.flingVx * game.timeScale;
+            c.flingY += c.flingVy * game.timeScale;
+            c.mesh.position.set(c.flingX, c.flingY, 0);
+
+            // Trail particles during flight
+            if (Math.random() < 0.7) {
+                const trailColor = Math.random() < 0.5 ? 0xff4400 : 0xffaa00;
+                createExplosion(c.flingX, c.flingY, trailColor, 2, 0.25);
+            }
+
+            // Check enemy hits
+            let hit = false;
+            for (let j = game.enemies.length - 1; j >= 0; j--) {
+                const e = game.enemies[j];
+                const dx = e.x - c.flingX, dy = e.y - c.flingY;
+                if (Math.sqrt(dx*dx + dy*dy) < 1.0) {
+                    e.health -= impactDamage;
+                    EntityAnimator.flash(e, 80);
+                    createExplosion(c.flingX, c.flingY, 0xff4400, 10, 1.0);
+                    showFloatingText('WHAM!', c.flingX, c.flingY, 0xff4400);
+                    GameFeel.shake(0.5);
+                    if (e.health <= 0) { killEnemy(e, j); }
+                    hit = true; break;
+                }
+            }
+            if (!hit && game.boss) {
+                const dx = game.boss.x - c.flingX, dy = game.boss.y - c.flingY;
+                if (Math.sqrt(dx*dx + dy*dy) < 2.5) {
+                    applyDamageToBoss(impactDamage, c.flingX, c.flingY);
+                    createExplosion(c.flingX, c.flingY, 0xff4400, 10, 1.0);
+                    showFloatingText('WHAM!', c.flingX, c.flingY, 0xff4400);
+                    GameFeel.shake(0.5);
+                    hit = true;
+                }
+            }
+            // Out of bounds or hit — return to orbit
+            if (hit || Math.abs(c.flingX) > 12 || Math.abs(c.flingY) > 12) {
+                c.state = 'returning';
+                c.returnStartX = c.flingX;
+                c.returnStartY = c.flingY;
+                c.returnStartTime = now;
+                c.returnDuration = 500;
+                c.lastFling = now + 1800; // cooldown before next fling
+            }
+            return;
+        }
+
+        // ──────────────────────────────────────────────────────────────────────
+        // STATE: returning — ease back to orbit
+        // ──────────────────────────────────────────────────────────────────────
+        if (c.state === 'returning') {
+            const t = Math.min((now - c.returnStartTime) / c.returnDuration, 1);
+            const ease = 1 - Math.pow(1 - t, 3); // easeOutCubic
+
+            const targetX = game.player.x + Math.cos(c.angle) * baseRadius;
+            const targetY = game.player.y + Math.sin(c.angle) * baseRadius * 0.8;
+
+            c.flingX = c.returnStartX + (targetX - c.returnStartX) * ease;
+            c.flingY = c.returnStartY + (targetY - c.returnStartY) * ease;
+            c.mesh.position.set(c.flingX, c.flingY, 0);
+            c.mesh.rotation.z -= 0.55 * game.timeScale;
+
+            if (t >= 1) {
+                c.state = 'orbiting';
+            }
+            return;
+        }
+
+        // ──────────────────────────────────────────────────────────────────────
+        // STATE: orbiting — normal behavior
+        // ──────────────────────────────────────────────────────────────────────
+        c.mesh.rotation.z -= 0.55 * game.timeScale;
+        c.mesh.rotation.y += 0.25 * game.timeScale;
+        c.angle += (0.07 + idx * 0.008) * game.timeScale;
+
+        const bob = Math.sin(now / 700 + idx * 2.1) * 0.35;
+        const cx = game.player.x + Math.cos(c.angle) * (baseRadius + bob);
+        const cy = game.player.y + Math.sin(c.angle) * (baseRadius + bob) * 0.8;
+        c.mesh.position.set(cx, cy, Math.sin(now / 600 + idx) * 0.25);
+
+        // ── Melee: damage anything touching the orbit ─────────────────────────
         for (let j = game.enemies.length - 1; j >= 0; j--) {
             const e = game.enemies[j];
-            const dx = e.x - c.mesh.position.x;
-            const dy = e.y - c.mesh.position.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < 2.5) {
+            const dx = e.x - cx, dy = e.y - cy;
+            if (Math.sqrt(dx*dx + dy*dy) < 1.2) {
                 const lastHit = c.damageTimers.get(e) || 0;
-                if (now - lastHit > 60) {
+                if (now - lastHit > 80) {
                     c.damageTimers.set(e, now);
                     e.health -= 2;
                     EntityAnimator.flash(e, 40);
-                    createExplosion(e.x + (Math.random()-0.5)*0.3, e.y + (Math.random()-0.5)*0.3, 0xff0000, 3, 0.6);
-                    if (e.health <= 0) {
-                        killEnemy(e, j);
-                        j--;
-                    }
+                    createExplosion(e.x, e.y, 0xff4400, 3, 0.5);
+                    if (e.health <= 0) { killEnemy(e, j); j--; }
                 }
             }
         }
-        // DAMAGE BOSS WITH CHAINSAWS
+
         if (game.boss) {
-            const dx = game.boss.x - c.mesh.position.x;
-            const dy = game.boss.y - c.mesh.position.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < 2.5) {
+            const dx = game.boss.x - cx, dy = game.boss.y - cy;
+            if (Math.sqrt(dx*dx + dy*dy) < 2.8) {
                 const lastHit = c.damageTimers.get(game.boss) || 0;
-                if (now - lastHit > 60) {
+                if (now - lastHit > 80) {
                     c.damageTimers.set(game.boss, now);
-                    applyDamageToBoss(2, c.mesh.position.x, c.mesh.position.y);
+                    applyDamageToBoss(2, cx, cy);
                 }
             }
+        }
+
+        // ── Bullet blocking (1.4-unit radius) — destroy ALL enemy projectiles ─
+        for (let b = game.enemyBullets.length - 1; b >= 0; b--) {
+            const bul = game.enemyBullets[b];
+            const dx = bul.x - cx, dy = bul.y - cy;
+            if (Math.sqrt(dx*dx + dy*dy) < 1.4) {
+                createExplosion(bul.x, bul.y, 0xffaa00, 3, 0.4);
+                scene.remove(bul.mesh);
+                ResourceManager.disposeMesh(bul.mesh);
+                game.enemyBullets.splice(b, 1);
+            }
+        }
+        // Block both vertical AND horizontal beams that overlap the saw
+        for (let b = game.enemyBeams.length - 1; b >= 0; b--) {
+            const bm = game.enemyBeams[b];
+            if (!bm.isHorizontal) {
+                // vertical beam
+                if (Math.abs(bm.x - cx) < 0.7 && cy > bm.y && cy < bm.y + bm.height) {
+                    createExplosion(cx, cy, 0xffaa00, 5, 0.7);
+                    scene.remove(bm.mesh);
+                    ResourceManager.disposeMesh(bm.mesh);
+                    game.enemyBeams.splice(b, 1);
+                }
+            } else {
+                // horizontal beam — check Y proximity and that saw is within beam path
+                if (Math.abs(bm.y - cy) < 0.5 && Math.abs(bm.x - cx) < bm.width / 2) {
+                    createExplosion(cx, cy, 0xffaa00, 5, 0.7);
+                    scene.remove(bm.mesh);
+                    ResourceManager.disposeMesh(bm.mesh);
+                    game.enemyBeams.splice(b, 1);
+                }
+            }
+        }
+
+        // ── Fling: every ~2.2s launch the entire saw at a random enemy/boss ──
+        const flingRate = 2200;
+        if (now - c.lastFling > flingRate) {
+            c.lastFling = now;
+
+            // Pick a RANDOM enemy (or boss) rather than nearest
+            let targets = [...game.enemies];
+            if (game.boss) targets.push(game.boss);
+            if (targets.length === 0) return;
+
+            const target = targets[Math.floor(Math.random() * targets.length)];
+            const ddx = target.x - cx, ddy = target.y - cy;
+            const dd = Math.sqrt(ddx*ddx + ddy*ddy) || 1;
+            const speed = 0.35;
+
+            c.state = 'flung';
+            c.flingVx = (ddx / dd) * speed;
+            c.flingVy = (ddy / dd) * speed;
+            c.flingX = cx;
+            c.flingY = cy;
+
+            showFloatingText('BUZZ!', cx, cy, 0xff6600);
+            createExplosion(cx, cy, 0xff4400, 5, 0.5);
         }
     });
 }
@@ -1613,10 +1804,44 @@ function updateEnemies() {
         }
         if (game.player && checkCollision(e, game.player) && !playerStats.invulnerable) {
             if (config.suicide) {
-                // Kamikaze: deal damage and self-destruct
+                // Kamikaze: deal damage and self-destruct with MASSIVE spectacle
                 handlePlayerHit(Math.ceil(config.damage * getDiffMod().enemyDamageMult));
-                createExplosion(e.x, e.y, 0xff6600, 14, 1.5);
-                GameFeel.shake(1.0);
+
+                // Three layered explosions
+                createExplosion(e.x, e.y, 0xff0000, 28, 2.0);   // red core
+                createExplosion(e.x, e.y, 0xff6600, 16, 1.5);   // orange burst
+                createExplosion(e.x, e.y, 0xffffff, 10, 1.2);   // white flash
+
+                // Expanding shockwave ring
+                const ringGeo = new THREE.RingGeometry(0.1, 0.4, 24);
+                const ringMat = new THREE.MeshBasicMaterial({ color: 0xff4400, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
+                const ring = new THREE.Mesh(ringGeo, ringMat);
+                ring.position.set(e.x, e.y, 0);
+                scene.add(ring);
+                const ringStart = Date.now();
+                const ringDuration = 600;
+                const ringTarget = 8;
+                const ringInterval = setInterval(() => {
+                    const elapsed = Date.now() - ringStart;
+                    const t = Math.min(elapsed / ringDuration, 1);
+                    const s = 1 + t * (ringTarget - 1);
+                    ring.scale.set(s, s, s);
+                    ringMat.opacity = 0.9 * (1 - t);
+                    if (t >= 1) {
+                        clearInterval(ringInterval);
+                        scene.remove(ring);
+                        ringGeo.dispose();
+                        ringMat.dispose();
+                    }
+                }, 16);
+
+                // Game feel
+                GameFeel.shake(2.2);
+                GameFeel.hitStop(5);
+                GameFeel.recoil((Math.random() - 0.5) * 0.6, -0.4);
+                showFloatingText('KABOOM!', e.x, e.y + 1, 0xff6600);
+                SoundManager.play('explosion', 0.8);
+
                 game.score += e.config.score;
                 scene.remove(e.mesh);
                 ResourceManager.disposeMesh(e.mesh);
@@ -2382,8 +2607,10 @@ function showFloatingText(text, x, y, color) {
     document.getElementById('ui').appendChild(div);
     const vector = new THREE.Vector3(x, y, 0);
     vector.project(camera);
-    div.style.left = (vector.x * 0.5 + 0.5) * window.innerWidth + 'px';
-    div.style.top = (-vector.y * 0.5 + 0.5) * window.innerHeight + 'px';
+    const screenX = Math.max(20, Math.min(window.innerWidth - 20, (vector.x * 0.5 + 0.5) * window.innerWidth));
+    const screenY = Math.max(20, Math.min(window.innerHeight - 20, (-vector.y * 0.5 + 0.5) * window.innerHeight));
+    div.style.left = screenX + 'px';
+    div.style.top = screenY + 'px';
     requestAnimationFrame(() => {
         div.style.transform = 'translate(-50%, -150%) scale(1.2)';
         div.style.opacity = '0';
@@ -2417,9 +2644,7 @@ function updateParticles() {
 
         if (p.life <= 0) {
             scene.remove(p.mesh);
-            if (p.isFlash && p.mesh.material) {
-                p.mesh.material.dispose();
-            }
+            // Do NOT dispose flash material — it's the shared materials.flashWhite pool object
             // NEVER dispose geometry — it comes from ResourceManager pool
             game.particles.splice(i, 1);
         }
@@ -2641,7 +2866,7 @@ function animate() {
 // START GAME
 // ============================================================================
 
-function startGame() {
+async function startGame() {
     if (typeof THREE === 'undefined') {
         alert('Three.js not loaded. Check your internet connection or use a local copy of three.js.');
         return;
@@ -2668,7 +2893,7 @@ function startGame() {
     game.isPlaying = true;
     game.player = createPlayer();
     
-     ARManager.init();
+     ARManager.init().catch(() => {}); // init in background, don't block game start
     startWave();
     animate();
 }
